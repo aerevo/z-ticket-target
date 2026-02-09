@@ -6,84 +6,53 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// --- CONFIG ---
-// Ini URL server Z-Kinetic (JANGAN UBAH)
+// URL Z-Kinetic Authority
 const Z_KINETIC_URL = 'https://z-kinetic-server.onrender.com/attest';
-let tickets = 1000; // Baki Tiket
 
-// --- 1. PINTU MASUK "BOCOR" (CLEAN) ---
-// FatBoy butang MERAH akan tembak sini
-app.post('/api/buy-clean', (req, res) => {
+let tickets = 1000; // Database tiket kita
+
+// --- PINTU 1: VULNERABLE (BOCOR) ---
+app.post('/api/purchase/vulnerable', (req, res) => {
     if (tickets > 0) {
-        tickets--; // Tiket luak terus!
-        console.log(`[CLEAN] 🔴 TICKET SOLD! Balance: ${tickets}`);
-        res.json({ status: 'success', message: 'Bought via Clean Door', balance: tickets });
+        tickets--;
+        res.json({ status: 'success', mode: 'vulnerable', balance: tickets });
     } else {
-        res.status(400).json({ status: 'fail', message: 'Sold Out' });
+        res.status(400).json({ message: 'Sold out' });
     }
 });
 
-// --- 2. PINTU MASUK "KEBAL" (INTEGRATED) ---
-// FatBoy butang HIJAU akan tembak sini
-app.post('/api/buy-integrated', async (req, res) => {
+// --- PINTU 2: PROTECTED (KEBAL) ---
+app.post('/api/purchase/protected', async (req, res) => {
     try {
-        // Tanya Z-Kinetic dulu: "Ini Bot ke Manusia?"
+        // Tanya Z-Kinetic
         const check = await axios.post(Z_KINETIC_URL, req.body);
-        
         if (check.data.status === 'verified') {
-            // Kalau Z-Kinetic kata OK (Manusia)
             if (tickets > 0) {
                 tickets--;
-                console.log(`[SECURE] 🟢 VERIFIED SALE. Balance: ${tickets}`);
-                res.json({ status: 'success', message: 'Bought via Secure Door', balance: tickets });
-            } else {
-                res.status(400).json({ status: 'fail', message: 'Sold Out' });
+                return res.json({ status: 'success', mode: 'protected', balance: tickets });
             }
-        } else {
-            // Kalau Z-Kinetic kata BOT
-            console.log(`[SECURE] 🛡️ BLOCKED A BOT!`);
-            res.status(403).json({ status: 'blocked', message: 'Z-Kinetic Blocked You!' });
         }
+        // Jika Z-Kinetic kata BOT atau token tak sah
+        res.status(403).json({ status: 'blocked', message: 'Z-Kinetic Blocked You' });
     } catch (e) {
-        // Kalau server error / tak ada token
         res.status(403).json({ status: 'blocked', message: 'Security Check Failed' });
     }
 });
 
-// --- RESET SYSTEM ---
-app.post('/api/reset', (req, res) => {
-    tickets = 1000;
-    console.log('🔄 SYSTEM RESET');
-    res.json({ message: 'Reset OK', balance: tickets });
-});
+// Reset & Status API
+app.get('/api/events', (req, res) => res.json({ tickets }));
+app.post('/api/admin/reset', (req, res) => { tickets = 1000; res.json({ balance: tickets }); });
 
-// --- DASHBOARD (FRONTEND) ---
+// Tampilan Website (Dashboard)
 app.get('/', (req, res) => {
     res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Z-TICKET LIVE</title>
-        <meta http-equiv="refresh" content="1"> <style>
-            body { background-color: #000; color: #0f0; font-family: 'Courier New', monospace; text-align: center; display: flex; flex-direction: column; justify-content: center; height: 100vh; margin: 0; }
-            h1 { font-size: 3rem; margin-bottom: 0; color: #fff; }
-            .count { font-size: 15rem; font-weight: bold; text-shadow: 0 0 20px #0f0; margin: 0; }
-            .label { font-size: 1.5rem; color: #666; }
-            .status { margin-top: 20px; padding: 10px; border: 1px solid #333; display: inline-block; }
-        </style>
-    </head>
-    <body>
-        <h1>COLDPLAY 2026</h1>
-        <div class="count">${tickets}</div>
-        <div class="label">TICKETS REMAINING</div>
-        <div class="status">
-            SERVER STATUS: <strong>ONLINE</strong><br>
-            MODE: <strong>HYBRID (Clean + Secured)</strong>
-        </div>
-    </body>
-    </html>
+        <body style="background:black;color:white;text-align:center;padding-top:100px;font-family:sans-serif;">
+            <h1>🎫 Z-TICKET LIVE DASHBOARD</h1>
+            <div style="font-size:150px;color:#00ff00;">${tickets}</div>
+            <p>Tickets Left</p>
+            <script>setInterval(()=>location.reload(), 1000)</script>
+        </body>
     `);
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(process.env.PORT || 3001);
